@@ -28,6 +28,8 @@ class InventoryAvailability(BaseModel):
     power: float
     exists: bool
     available_quantity: int
+    in_stock: bool
+    quantity: int
 
 
 class OrderCreate(BaseModel):
@@ -92,6 +94,17 @@ class DelayLogRead(BaseModel):
     id: int
     order_id: int
     reason: str
+    created_at: datetime
+
+
+class AlertRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_id: int
+    customer_name: str
+    breach_probability: float
+    alert_type: str
     created_at: datetime
 
 

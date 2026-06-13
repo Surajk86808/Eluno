@@ -48,3 +48,14 @@ class DelayLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     order: Mapped[Order] = relationship(back_populates="delay_logs")
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    customer_name: Mapped[str] = mapped_column(String(120))
+    breach_probability: Mapped[float] = mapped_column(Float, default=0.0)
+    alert_type: Mapped[str] = mapped_column(String(20), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

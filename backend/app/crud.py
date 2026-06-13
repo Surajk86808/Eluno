@@ -69,11 +69,14 @@ def get_inventory_availability(db: Session, lens_type: str, power: float) -> dic
             Inventory.power == power,
         )
     )
+    quantity = item.quantity if item else 0
     return {
         "lens_type": lens_type,
         "power": power,
         "exists": item is not None,
-        "available_quantity": item.quantity if item else 0,
+        "available_quantity": quantity,
+        "in_stock": quantity > 0,
+        "quantity": quantity,
     }
 
 

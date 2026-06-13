@@ -22,10 +22,16 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
     return request(`/orders${query.toString() ? `?${query}` : ""}`);
   },
+  createOrder: (payload) =>
+    request("/orders", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   inventory: () => request("/inventory"),
   inventoryCheck: (lensType, power) =>
     request(`/inventory/check?lens_type=${encodeURIComponent(lensType)}&power=${encodeURIComponent(power)}`),
   analytics: () => request("/analytics/operations"),
+  alerts: () => request("/alerts"),
   referenceData: () => request("/orders/meta/reference-data"),
   updateOrderStatus: (orderId, payload) =>
     request(`/orders/${orderId}/status`, {

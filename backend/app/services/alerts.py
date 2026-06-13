@@ -7,7 +7,7 @@ import smtplib
 
 from sqlalchemy.orm import Session
 
-from app.models import Order
+from app.models import Alert, Order
 from app.services.sla import calculate_remaining_sla_hours, is_sla_breached
 
 
@@ -76,8 +76,16 @@ def send_email_alert(order: Order) -> bool:
 
 def evaluate_and_send_alert(db: Session, order: Order) -> None:
     if order.alert_sent_at is None and should_send_alert(order):
-        if send_email_alert(order):
-            order.alert_sent_at = datetime.utcnow()
-            db.add(order)
-            db.commit()
-            db.refresh(order)
+        alert_type = "Breached" if is_sla_breached(order) else "High Risk"
+        alert = Alert(
+            order_id=order.id,
+            customer_name=order.customer_name,
+            breach_probability=round(order.breach_probability or 0.0, 2),
+            alert_type=alert_type,
+        )
+        order.alert_sent_at = datetime.utcnow()
+        db.add(alert)
+        db.add(order)
+        send_email_alert(order)
+        db.commit()
+        db.refresh(order)

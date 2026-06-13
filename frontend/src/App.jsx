@@ -1,13 +1,16 @@
-import { Activity, AlertTriangle, Boxes, Clock, Edit3, History, LayoutDashboard, LineChart, PackageCheck, Save, Search, X } from "lucide-react";
+import { Activity, AlertTriangle, Boxes, Clock, Edit3, History, LayoutDashboard, LineChart, PackageCheck, Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "./api";
+import PrescriptionUpload from "./components/PrescriptionUpload";
+import Alerts from "./pages/Alerts";
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "inventory", label: "Inventory", icon: Boxes },
   { id: "orders", label: "Orders", icon: PackageCheck },
   { id: "analytics", label: "Analytics", icon: LineChart },
+  { id: "alerts", label: "Alerts" },
 ];
 
 function Stat({ label, value, icon: Icon, tone = "default" }) {
@@ -99,9 +102,23 @@ function OrderTable({ orders, onUpdateStatus, onViewDelayHistory }) {
   );
 }
 
-function Dashboard({ summary, activeOrders }) {
+function Dashboard({ summary, activeOrders, onNewOrderViaPrescription }) {
   return (
-    <section className="space-y-5">
+    <section className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-6 rounded-xl border border-line shadow-sm">
+        <div className="space-y-1">
+          <h2 className="text-xl font-bold text-ink">Operational Overview</h2>
+          <p className="text-sm text-slate-500">Monitor order health and lens inventory in real-time</p>
+        </div>
+        <button 
+          className="btn-primary py-3 px-6 text-base font-semibold shadow-md hover:shadow-lg transition-all" 
+          type="button" 
+          onClick={onNewOrderViaPrescription}
+        >
+          <PackageCheck className="h-5 w-5" /> New Order via Prescription
+        </button>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-4">
         <Stat label="Total Orders" value={summary?.total_orders ?? 0} icon={PackageCheck} />
         <Stat label="Active Orders" value={summary?.active_orders ?? 0} icon={Activity} tone="signal" />
@@ -112,10 +129,13 @@ function Dashboard({ summary, activeOrders }) {
         <Stat label="Low Stock Items" value={summary?.low_stock_items ?? 0} icon={Boxes} tone="warning" />
         <Stat label="Avg SLA Left" value={`${averageRemainingHours(activeOrders)}h`} icon={Clock} />
       </div>
-      <div>
-        <div className="mb-3 flex items-center justify-between">
+
+      <div className="pt-2">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-ink">Active Order Queue</h2>
-          <span className="text-sm text-slate-500">{activeOrders.length} open orders</span>
+          <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+            {activeOrders.length} open orders
+          </span>
         </div>
         <OrderTable orders={activeOrders.slice(0, 12)} />
       </div>
@@ -130,6 +150,16 @@ function Inventory({ inventory, refs }) {
 
   const lowStock = inventory.filter((item) => item.quantity <= item.reorder_level);
 
+  function handleLensTypeChange(event) {
+    setLensType(event.target.value);
+    setAvailability(null);
+  }
+
+  function handlePowerChange(event) {
+    setPower(event.target.value);
+    setAvailability(null);
+  }
+
   async function checkAvailability() {
     setAvailability(await api.inventoryCheck(lensType, power));
   }
@@ -140,19 +170,25 @@ function Inventory({ inventory, refs }) {
         <div className="rounded-lg border border-line bg-white p-4">
           <h2 className="text-lg font-semibold text-ink">Inventory Availability</h2>
           <div className="mt-4 space-y-3">
-            <select className="field" value={lensType} onChange={(event) => setLensType(event.target.value)}>
+            <select className="field" value={lensType} onChange={handleLensTypeChange}>
               {refs.lens_types.map((type) => <option key={type}>{type}</option>)}
             </select>
-            <input className="field" type="number" step="0.5" value={power} onChange={(event) => setPower(event.target.value)} />
+            <input className="field" type="number" step="0.5" value={power} onChange={handlePowerChange} />
             <button className="btn-primary" onClick={checkAvailability}>
-              <Search className="h-4 w-4" /> Check
+              Check
             </button>
+            {availability && (
+              <div
+                className={`border-l-4 px-3 py-2 text-sm font-medium ${
+                  availability.in_stock ? "border-green-600 bg-green-50 text-green-800" : "border-red-600 bg-red-50 text-red-800"
+                }`}
+              >
+                {availability.in_stock
+                  ? `In Stock — Qty: ${availability.quantity}`
+                  : "Out of Stock — will need to order"}
+              </div>
+            )}
           </div>
-          {availability && (
-            <div className="mt-4 rounded-md bg-slate-50 p-3 text-sm">
-              {availability.exists ? `${availability.available_quantity} units available` : "Power not found in inventory"}
-            </div>
-          )}
         </div>
         <div className="rounded-lg border border-line bg-white p-4">
           <h2 className="text-lg font-semibold text-ink">Low Stock Watchlist</h2>
@@ -235,9 +271,113 @@ function DelayHistoryModal({ order, history, onClose }) {
   );
 }
 
-function Orders({ orders, refs, filters, setFilters, onUpdateStatus, onViewDelayHistory }) {
+function PrescriptionUploadModal({ onClose, onOrderCreated }) {
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/50 px-4">
+      <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="p-5 border-b border-line flex items-center justify-between shrink-0">
+          <h2 className="text-xl font-bold text-ink">New Order via Prescription</h2>
+          <button className="icon-button" onClick={onClose} title="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          <PrescriptionUpload onOrderCreated={onOrderCreated} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewOrderModal({ draft, refs, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    customer_name: "",
+    lens_type: draft.lens_type || "Single Vision",
+    power: draft.power || "",
+    coating: draft.coating || "",
+    frame_name: "",
+    store_location: refs.store_locations[0] || "",
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSubmit() {
+    setIsSaving(true);
+    try {
+      await onSubmit({
+        customer_name: form.customer_name,
+        lens_type: form.lens_type,
+        power: Number(form.power),
+        frame_name: form.frame_name,
+        store_location: form.store_location,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/50 px-4">
+      <div className="w-full max-w-xl bg-white p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-ink">New Order</h2>
+          <button className="icon-button" onClick={onClose} title="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <input
+            className="field"
+            value={form.customer_name}
+            onChange={(event) => updateField("customer_name", event.target.value)}
+            placeholder="Customer name"
+          />
+          <input
+            className="field"
+            value={form.frame_name}
+            onChange={(event) => updateField("frame_name", event.target.value)}
+            placeholder="Frame name"
+          />
+          <select className="field" value={form.lens_type} onChange={(event) => updateField("lens_type", event.target.value)}>
+            {refs.lens_types.map((type) => <option key={type}>{type}</option>)}
+          </select>
+          <input
+            className="field"
+            type="number"
+            step="0.25"
+            value={form.power}
+            onChange={(event) => updateField("power", event.target.value)}
+            placeholder="Power"
+          />
+          <input
+            className="field"
+            value={form.coating}
+            onChange={(event) => updateField("coating", event.target.value)}
+            placeholder="Coating"
+          />
+          <select className="field" value={form.store_location} onChange={(event) => updateField("store_location", event.target.value)}>
+            {refs.store_locations.map((store) => <option key={store}>{store}</option>)}
+          </select>
+        </div>
+        <button className="btn-primary mt-4" type="button" onClick={handleSubmit} disabled={isSaving}>
+          {isSaving ? "Creating..." : "Create Order"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Orders({ orders, refs, filters, setFilters, onUpdateStatus, onViewDelayHistory, onUploadPrescription }) {
   return (
     <section className="space-y-4">
+      <div className="flex justify-end">
+        <button className="btn-secondary" type="button" onClick={onUploadPrescription}>
+          Upload Prescription
+        </button>
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         <select className="field" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
           <option value="">All statuses</option>
@@ -290,19 +430,24 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   const [refs, setRefs] = useState({ lens_types: [], order_statuses: [], store_locations: [] });
   const [filters, setFilters] = useState({ status: "", lens_type: "", store_location: "" });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [delayHistoryState, setDelayHistoryState] = useState(null);
+  const [showPrescriptionUpload, setShowPrescriptionUpload] = useState(false);
+  const [prescriptionUploadSource, setPrescriptionUploadSource] = useState(null);
+  const [orderDraft, setOrderDraft] = useState(null);
   const [error, setError] = useState("");
 
   async function refreshData(currentFilters = filters) {
-    const [summaryData, activeOrderData, orderData, inventoryData, analyticsData, referenceData] = await Promise.all([
+    const [summaryData, activeOrderData, orderData, inventoryData, analyticsData, alertsData, referenceData] = await Promise.all([
       api.summary(),
       api.activeOrders(),
       api.orders(currentFilters),
       api.inventory(),
       api.analytics(),
+      api.alerts(),
       api.referenceData(),
     ]);
     setSummary(summaryData);
@@ -310,7 +455,27 @@ export default function App() {
     setOrders(orderData);
     setInventory(inventoryData);
     setAnalytics(analyticsData);
+    setAlerts(alertsData);
     setRefs(referenceData);
+  }
+
+  async function fetchStats() {
+    const summaryData = await api.summary();
+    setSummary(summaryData);
+  }
+
+  async function fetchOrders(currentFilters = filters) {
+    const [activeOrderData, orderData] = await Promise.all([
+      api.activeOrders(),
+      api.orders(currentFilters),
+    ]);
+    setActiveOrders(activeOrderData);
+    setOrders(orderData);
+  }
+
+  function openPrescriptionUpload(source) {
+    setPrescriptionUploadSource(source);
+    setShowPrescriptionUpload(true);
   }
 
   useEffect(() => {
@@ -333,6 +498,23 @@ export default function App() {
     setDelayHistoryState({ order, history });
   }
 
+  async function handleOrderCreatedFromPrescription() {
+    if (prescriptionUploadSource === "dashboard") {
+      await fetchStats();
+      await fetchOrders();
+    } else {
+      await fetchOrders();
+    }
+    setShowPrescriptionUpload(false);
+    setPrescriptionUploadSource(null);
+  }
+
+  async function handleCreateOrder(payload) {
+    await api.createOrder(payload);
+    setOrderDraft(null);
+    await refreshData();
+  }
+
   const page = useMemo(() => {
     if (activeTab === "inventory") return <Inventory inventory={inventory} refs={refs} />;
     if (activeTab === "orders") {
@@ -344,12 +526,20 @@ export default function App() {
           setFilters={setFilters}
           onUpdateStatus={setSelectedOrder}
           onViewDelayHistory={(order) => handleViewDelayHistory(order).catch((err) => setError(err.message))}
+          onUploadPrescription={() => openPrescriptionUpload("orders")}
         />
       );
     }
     if (activeTab === "analytics") return <Analytics analytics={analytics} />;
-    return <Dashboard summary={summary} activeOrders={activeOrders} />;
-  }, [activeTab, activeOrders, analytics, filters, inventory, orders, refs, summary]);
+    if (activeTab === "alerts") return <Alerts alerts={alerts} />;
+    return (
+      <Dashboard
+        summary={summary}
+        activeOrders={activeOrders}
+        onNewOrderViaPrescription={() => openPrescriptionUpload("dashboard")}
+      />
+    );
+  }, [activeTab, activeOrders, alerts, analytics, filters, inventory, orders, refs, summary]);
 
   return (
     <div className="min-h-screen bg-surface text-slate-700">
@@ -362,7 +552,7 @@ export default function App() {
           <div className="flex flex-wrap gap-2">
             {tabs.map(({ id, label, icon: Icon }) => (
               <button key={id} className={`nav-button ${activeTab === id ? "nav-button-active" : ""}`} onClick={() => setActiveTab(id)}>
-                <Icon className="h-4 w-4" /> {label}
+                {Icon && <Icon className="h-4 w-4" />} {label}
               </button>
             ))}
           </div>
@@ -385,6 +575,23 @@ export default function App() {
           order={delayHistoryState.order}
           history={delayHistoryState.history}
           onClose={() => setDelayHistoryState(null)}
+        />
+      )}
+      {showPrescriptionUpload && (
+        <PrescriptionUploadModal
+          onClose={() => {
+            setShowPrescriptionUpload(false);
+            setPrescriptionUploadSource(null);
+          }}
+          onOrderCreated={() => handleOrderCreatedFromPrescription().catch((err) => setError(err.message))}
+        />
+      )}
+      {orderDraft && (
+        <NewOrderModal
+          draft={orderDraft}
+          refs={refs}
+          onClose={() => setOrderDraft(null)}
+          onSubmit={(payload) => handleCreateOrder(payload).catch((err) => setError(err.message))}
         />
       )}
     </div>
