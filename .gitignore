@@ -1,0 +1,42 @@
+# Environment
+.env
+*.env
+.venv/
+backend/venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/__pycache__/
+backend/app/**/__pycache__/
+backend/app/alerts.log
+backend/order_management.db
+backend/server.log
+backend/server.err
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/server.log
+frontend/server.err
+.eslintcache
+.stylelintcache
+
+# Testing
+.playwright-mcp/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Project Specific
+docs/
+FINAL_SUBMISSION_REVIEW.md
+copyt.txt
+order.json
+
+# Misc
+.DS_Store
+Thumbs.db
