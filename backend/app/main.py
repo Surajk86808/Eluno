@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -13,14 +14,13 @@ from sqlalchemy.orm import Session
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from app.api.routes import analytics, dashboard, inventory, orders
-from app.database import Base, engine, ensure_sqlite_schema, get_db
+from app.database import Base, engine, get_db
 from app.models import Alert, Inventory, Order
 from app import crud
 from app.schemas import AlertRead, OrderRead, PredictionRead, RiskPredictionRequest
 from app.services.ml_predictor import PredictionError, predict_breach
 
-Base.metadata.create_all(bind=engine)
-ensure_sqlite_schema()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="AI-Powered Eyewear Order Management System",
@@ -43,6 +43,17 @@ app.include_router(inventory.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+
+
+@app.on_event("startup")
+def create_database_tables() -> None:
+    if os.getenv("AUTO_CREATE_TABLES", "").lower() not in {"1", "true", "yes"}:
+        return
+
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        logger.exception("Database table initialization failed")
 
 
 @app.get("/api/inventory/low-stock")
@@ -77,7 +88,18 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/alerts", response_model=list[AlertRead])
 def list_alerts(db: Session = Depends(get_db)):
-    return db.scalars(select(Alert).order_by(Alert.created_at.desc()).limit(50)).all()
+    alerts = db.scalars(select(Alert).order_by(Alert.created_at.desc()).limit(50)).all()
+    return [
+        {
+            "id": a.id,
+            "order_id": a.order_id,
+            "customer_name": a.customer_name,
+            "breach_percentage": round(a.breach_probability * 100, 2),
+            "alert_type": a.alert_type,
+            "created_at": a.created_at
+        }
+        for a in alerts
+    ]
 
 
 @app.post("/api/prescription/parse")
@@ -138,6 +160,10 @@ async def parse_prescription(file: UploadFile = File(...)):
 @app.post("/api/predict-risk", response_model=PredictionRead)
 def predict_risk(payload: RiskPredictionRequest):
     try:
-        return predict_breach(payload.model_dump())
+        prediction = predict_breach(payload.model_dump())
+        return {
+            "risk_level": prediction["risk_level"],
+            "breach_percentage": round(prediction["breach_probability"] * 100, 2)
+        }
     except PredictionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

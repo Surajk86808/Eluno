@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import crud
+from app.constants import TERMINAL_STATUSES
 from app.database import get_db
 from app.models import Inventory, Order
 from app.schemas import DashboardSummary, OrderRead
@@ -28,19 +29,24 @@ def summary(db: Session = Depends(get_db)):
     for order in serialized:
         risk_counts[order["risk_level"]] = risk_counts.get(order["risk_level"], 0) + 1
 
+    active_orders = [order for order in serialized if order["status"] not in TERMINAL_STATUSES]
+    inventory_by_lens_power = {
+        (item.lens_type, item.power): item.quantity
+        for item in db.scalars(select(Inventory))
+    }
     inventory_items = db.scalar(select(func.count()).select_from(Inventory)) or 0
     low_stock_items = db.scalar(select(func.count()).select_from(Inventory).where(Inventory.quantity <= Inventory.reorder_level)) or 0
     inventory_available = db.scalar(select(func.coalesce(func.sum(Inventory.quantity), 0))) or 0
     inventory_shortage_orders = sum(
         1
         for order in orders
-        if crud.get_inventory_availability(db, order.lens_type, order.power)["available_quantity"] <= 0
+        if inventory_by_lens_power.get((order.lens_type, order.power), 0) <= 0
     )
 
     return {
         "total_orders": len(orders),
-        "active_orders": len(crud.get_active_orders(db)),
-        "delayed_orders": len(crud.get_delayed_orders(db)),
+        "active_orders": len(active_orders),
+        "delayed_orders": sum(1 for order in active_orders if order["is_breached"]),
         "inventory_items": inventory_items,
         "low_stock_items": low_stock_items,
         "high_risk_orders": risk_counts["High"],

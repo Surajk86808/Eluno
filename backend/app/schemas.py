@@ -50,7 +50,7 @@ class OrderStatusUpdate(BaseModel):
 
 class PredictionRead(BaseModel):
     risk_level: str
-    breach_probability: float
+    breach_percentage: float
 
 
 class RiskPredictionRequest(BaseModel):
@@ -82,7 +82,7 @@ class OrderRead(BaseModel):
     remaining_sla_hours: float
     is_breached: bool
     risk_level: str
-    breach_probability: float
+    breach_percentage: float
     latest_delay_reason: str
     qc_failures: int
     rework_count: int
@@ -103,7 +103,7 @@ class AlertRead(BaseModel):
     id: int
     order_id: int
     customer_name: str
-    breach_probability: float
+    breach_percentage: float
     alert_type: str
     created_at: datetime
 

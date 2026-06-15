@@ -26,7 +26,7 @@ def serialize_order(order: Order) -> dict:
         "remaining_sla_hours": calculate_remaining_sla_hours(order),
         "is_breached": is_sla_breached(order),
         "risk_level": order.risk_level or "Low",
-        "breach_probability": round(order.breach_probability or 0.0, 2),
+        "breach_percentage": round((order.breach_probability or 0.0) * 100, 2),
         "latest_delay_reason": order.latest_delay_reason or "None",
         "qc_failures": order.qc_failures or 0,
         "rework_count": order.rework_count or 0,
