@@ -8,6 +8,8 @@ import re
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,6 +23,8 @@ from app.schemas import AlertRead, OrderRead, PredictionRead, RiskPredictionRequ
 from app.services.ml_predictor import PredictionError, predict_breach
 
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 app = FastAPI(
     title="AI-Powered Eyewear Order Management System",
@@ -28,8 +32,15 @@ app = FastAPI(
     description="Order, inventory, SLA, prediction, and alert APIs for an eyewear operations team.",
 )
 
-# Load allowed origins from environment variable, fallback to common defaults
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+# Load allowed origins from environment variable, fallback to common defaults.
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,https://eluno-zrt2.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +54,20 @@ app.include_router(inventory.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+
+
+@app.get("/")
+def root():
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+
+    return {
+        "status": "ok",
+        "service": "nexusapi",
+        "health": "/health",
+        "docs": "/docs",
+    }
 
 
 @app.on_event("startup")
@@ -167,3 +192,16 @@ def predict_risk(payload: RiskPredictionRequest):
         }
     except PredictionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+if (FRONTEND_DIST / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend(full_path: str):
+    index_file = FRONTEND_DIST / "index.html"
+    if not index_file.exists() or full_path.startswith(("api/", "docs", "openapi.json", "redoc")):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return FileResponse(index_file)

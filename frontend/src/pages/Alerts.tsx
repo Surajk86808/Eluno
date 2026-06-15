@@ -2,7 +2,7 @@ type Alert = {
   id: number;
   order_id: number;
   customer_name: string;
-  breach_probability: number;
+  breach_percentage: number;
   alert_type: "Breached" | "High Risk" | string;
   created_at: string;
 };
@@ -32,7 +32,7 @@ export default function Alerts({ alerts }: AlertsProps) {
           <tr>
             <th className="px-4 py-3">Order ID</th>
             <th className="px-4 py-3">Customer Name</th>
-            <th className="px-4 py-3">Breach Probability</th>
+            <th className="px-4 py-3">Breach %</th>
             <th className="px-4 py-3">Timestamp</th>
             <th className="px-4 py-3">Status</th>
           </tr>
@@ -42,7 +42,7 @@ export default function Alerts({ alerts }: AlertsProps) {
             <tr key={alert.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-medium text-ink">#{alert.order_id}</td>
               <td className="px-4 py-3">{alert.customer_name}</td>
-              <td className="px-4 py-3 font-medium text-ink">{alert.breach_probability}%</td>
+              <td className="px-4 py-3 font-medium text-ink">{alert.breach_percentage}%</td>
               <td className="px-4 py-3">{new Date(alert.created_at).toLocaleString()}</td>
               <td className="px-4 py-3">
                 <AlertPill type={alert.alert_type} />

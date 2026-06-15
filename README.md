@@ -13,7 +13,7 @@ A production-style full-stack order management system (OMS) designed for eyewear
 
 ## Tech Stack
 
-- **Backend**: FastAPI, SQLAlchemy, SQLite, Pydantic, Scikit-Learn, Joblib
+- **Backend**: FastAPI, SQLAlchemy, PostgreSQL/Neon, Pydantic, Scikit-Learn, Joblib
 - **Frontend**: React (TypeScript), Vite, Tailwind CSS
 - **AI/ML**: Google Gemini (Flash 3.5), RandomForest Classifier
 
@@ -50,6 +50,9 @@ GOOGLE_API_KEY=your_key_here
 # Optional: CORS allowed origins (comma-separated)
 ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
+# Neon/Postgres database connection
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+
 # Optional: SMTP for Email Alerts
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
@@ -64,7 +67,7 @@ cd backend
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
-python seed.py
+python check_db.py
 uvicorn main:app --reload
 ```
 *Backend: http://localhost:8000 | API Docs: http://localhost:8000/docs*

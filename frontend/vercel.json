@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://nexusapi-994745516874.us-central1.run.app/api/:path*"
+    }
+  ]
+}

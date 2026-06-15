@@ -60,7 +60,7 @@ function OrderTable({ orders, onUpdateStatus, onViewDelayHistory }) {
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">SLA Left</th>
               <th className="px-4 py-3">Risk</th>
-              <th className="px-4 py-3">Probability</th>
+              <th className="px-4 py-3">Breach %</th>
               <th className="px-4 py-3">Delay Reason</th>
               {(onUpdateStatus || onViewDelayHistory) && <th className="px-4 py-3">Actions</th>}
             </tr>
@@ -75,7 +75,7 @@ function OrderTable({ orders, onUpdateStatus, onViewDelayHistory }) {
                 <td className="px-4 py-3">{order.status}</td>
                 <td className="px-4 py-3">{order.remaining_sla_hours}h</td>
                 <td className="px-4 py-3"><RiskPill risk={order.risk_level} /></td>
-                <td className="px-4 py-3 font-medium text-ink">{order.breach_probability}%</td>
+                <td className="px-4 py-3 font-medium text-ink">{order.breach_percentage}%</td>
                 <td className="px-4 py-3">{order.latest_delay_reason}</td>
                 {(onUpdateStatus || onViewDelayHistory) && (
                   <td className="px-4 py-3">
