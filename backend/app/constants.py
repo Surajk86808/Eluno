@@ -1,3 +1,5 @@
+# SLA_HOURS = {"Single Vision": 48, "Bifocal": 72, "Progressive": 96}
+
 LENS_TYPES = ["Single Vision", "Progressive", "Bifocal"]
 
 ORDER_STATUSES = [
@@ -10,14 +12,16 @@ ORDER_STATUSES = [
     "Packing",
     "Shipped",
     "Delivered",
+    "Cancelled",
+    "Rejected",
 ]
 
-TERMINAL_STATUSES = {"Shipped", "Delivered"}
+TERMINAL_STATUSES = ["Delivered", "Cancelled", "Rejected"]
 
 SLA_HOURS_BY_LENS_TYPE = {
-    "Single Vision": 24,
-    "Bifocal": 48,
-    "Progressive": 72,
+    "Single Vision": 48,
+    "Bifocal": 72,
+    "Progressive": 96,
 }
 
 STORE_LOCATIONS = [

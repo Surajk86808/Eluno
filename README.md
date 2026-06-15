@@ -1,119 +1,99 @@
-# AI-Powered Eyewear Order Management System
+# AI-Powered Eyewear Order Management System (Eluno)
 
-Production-style full-stack order management system for an eyewear company. It tracks lens inventory, prescription orders, fulfillment workflow, SLA health, risk prediction, and operational alerts.
+A production-style full-stack order management system (OMS) designed for eyewear operations. The system integrates traditional inventory management with AI-powered prescription parsing and Machine Learning-based SLA risk prediction.
+
+## Core Features
+
+- **AI Prescription Parser**: Automatically extracts structured lens data (SPH, Add Power, Lens Type) from uploaded PDFs or images using **Gemini 3.5-flash**.
+- **ML SLA Prediction**: Uses a **RandomForestClassifier** to predict the probability of an order breaching its SLA based on real-time operational signals (e.g., inventory, rework count, current stage).
+- **Inventory Management**: Real-time tracking of lens stock levels with automated low-stock detection.
+- **Order Workflow**: A comprehensive 9-stage fulfillment workflow from "Order Placed" to "Delivered".
+- **Operational Dashboard**: Real-time stats on active orders, delayed orders, and high-risk shipments.
+- **Automated Alerts**: Email notifications triggered by ML risk thresholds or actual SLA breaches.
 
 ## Tech Stack
 
-- Backend: FastAPI, SQLAlchemy, SQLite, Pydantic
-- Frontend: React, Vite, Tailwind CSS
-- AI layer: RandomForest SLA breach prediction with saved model and encoders
+- **Backend**: FastAPI, SQLAlchemy, SQLite, Pydantic, Scikit-Learn, Joblib
+- **Frontend**: React (TypeScript), Vite, Tailwind CSS
+- **AI/ML**: Google Gemini (Flash 3.5), RandomForest Classifier
 
 ## Project Structure
 
 ```text
 backend/
-  main.py            Compatibility entry point for uvicorn main:app
   app/
-    api/routes/        FastAPI route modules
-    services/          SLA, prediction, and alert logic
-    constants.py       Workflow, SLA, lens, and store constants
-    crud.py            Database operations and order serialization
-    database.py        SQLite connection and SQLAlchemy session
-    main.py            FastAPI application factory and route registration
-    models.py          SQLAlchemy tables
-    schemas.py         Pydantic request and response models
-  seed.py              Dummy inventory and order generator
-  requirements.txt
+    api/routes/        # API endpoints (Inventory, Orders, Dashboard, Analytics)
+    services/          # Business logic (SLA, ML Predictor, Alerts)
+    main.py            # FastAPI App factory and configuration
+    models.py          # SQLAlchemy Database Models
+    schemas.py         # Pydantic Data Validation Schemas
+  model/               # ML Model artifacts (.pkl) and training script
+  scripts/             # Utility scripts (Backfill, SMTP test, Alert triggers)
+  main.py              # Entry point for Uvicorn
 frontend/
   src/
-    App.jsx            React pages and components
-    api.js             API client
-    styles.css         Tailwind component classes
-docs/
-  *.md                 Architecture, module, API, and interview documentation
+    components/        # Reusable UI components (e.g., PrescriptionUpload)
+    pages/             # Page-level components
+    api.js             # Centralized API client
+docs/                  # Detailed documentation for architecture and modules
 ```
 
-## Backend Setup
+## Setup & Installation
 
+### 1. Environment Configuration
+Create a `.env` file in the root directory:
+
+```env
+# Gemini API Key (Required for Prescription Parsing)
+GOOGLE_API_KEY=your_key_here
+
+# Optional: CORS allowed origins (comma-separated)
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+
+# Optional: SMTP for Email Alerts
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=user@example.com
+SMTP_PASSWORD=pass
+ALERT_RECIPIENT=ops@example.com
+```
+
+### 2. Backend Setup
 ```bash
 cd backend
-python -m venv .venv
-.venv\Scripts\activate
+python -m venv venv
+.\venv\Scripts\activate
 pip install -r requirements.txt
 python seed.py
 uvicorn main:app --reload
 ```
+*Backend: http://localhost:8000 | API Docs: http://localhost:8000/docs*
 
-Backend runs at `http://localhost:8000`.
-
-API docs are available at:
-
-- Swagger: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-If `uvicorn main:app --reload` shows `[WinError 10013]`, port `8000` is already in use or blocked. Check the process:
-
-```powershell
-netstat -ano | findstr :8000
-```
-
-Then either stop the listed process:
-
-```powershell
-taskkill /PID <PID> /F
-uvicorn main:app --reload
-```
-
-Or run the backend on another port:
-
-```powershell
-uvicorn main:app --reload --port 8001
-```
-
-## Frontend Setup
-
+### 3. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+*Frontend: http://localhost:5173*
 
-Frontend runs at `http://localhost:5173`.
+## SLA & Risk Logic
 
-## Core APIs
+### SLA Rules
+- **Single Vision**: 48 Hours
+- **Bifocal**: 72 Hours
+- **Progressive**: 96 Hours
 
-- `GET /health`
-- `GET /api/inventory`
-- `GET /api/inventory/check?lens_type=Single%20Vision&power=-2.0`
-- `GET /api/orders`
-- `GET /api/orders?status=Lens%20Cutting`
-- `GET /api/orders?lens_type=Progressive`
-- `GET /api/orders?store_location=Chicago%20Loop`
-- `POST /api/orders`
-- `PATCH /api/orders/{order_id}/status`
-- `GET /api/orders/{order_id}/delay-history`
-- `POST /predict-risk`
-- `POST /api/predict-risk`
-- `GET /api/dashboard/summary`
-- `GET /api/dashboard/active-orders`
-- `GET /api/dashboard/delayed-orders`
-- `GET /api/analytics/operations`
+### ML Risk Thresholds
+The system predicts a **Breach Probability** (clipped to 0.0 - 1.0) and assigns a risk level:
+- **Low**: 0% - 30%
+- **Medium**: 30% - 70%
+- **High**: 70% - 100%
 
-## Seed Data
+*Note: Automated alerts are triggered when an order is "Breached" or exceeds a **80%** breach probability.*
 
-`python seed.py` creates:
-
-- 75 inventory rows: 3 lens types x 25 powers from `-6.0` to `+6.0`
-- 150 realistic sample orders across workflow statuses and store locations
-
-## SLA Rules
-
-- Single Vision: 24 hours
-- Bifocal: 48 hours
-- Progressive: 72 hours
-
-ML risk prediction:
-
-- 0-40 percent breach probability: Low
-- 40-70 percent breach probability: Medium
-- 70-100 percent breach probability: High
+## Cleanup & Maintenance
+The repository is kept "Clean and Clear" by:
+- Storing environment-specific values in `.env`.
+- Excluding logs, caches (`__pycache__`), and build artifacts via `.gitignore`.
+- Using centralized documentation in the `docs/` directory.

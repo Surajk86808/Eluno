@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -44,9 +45,9 @@ def load_artifacts() -> tuple[Any, dict[str, Any]]:
 
 
 def _risk_level(probability: float) -> str:
-    if probability >= 70:
+    if probability >= 0.7:
         return "High"
-    if probability >= 40:
+    if probability >= 0.3:
         return "Medium"
     return "Low"
 
@@ -72,12 +73,10 @@ def predict_breach(order_data: dict[str, Any]) -> dict[str, float | str]:
             for feature in feature_order
         ]
 
-        if hasattr(model, "predict_proba"):
-            probability = float(model.predict_proba([encoded_features])[0][1]) * 100
-        else:
-            probability = float(model.predict([encoded_features])[0]) * 100
+        # Use predict_proba as per instructions and clip to [0.0, 1.0]
+        val = model.predict_proba([encoded_features])[:, 1][0]
+        probability = float(np.clip(val, 0.0, 1.0))
 
-        probability = round(max(0.0, min(probability, 100.0)), 2)
         return {
             "breach_probability": probability,
             "risk_level": _risk_level(probability),

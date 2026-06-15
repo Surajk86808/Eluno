@@ -34,15 +34,27 @@ def seed_inventory(db):
 from app import crud
 
 def seed_orders(db):
-    weighted_statuses = ORDER_STATUSES[:-1] + ["Lens Cutting", "Coating", "Quality Check", "Packing"]
+    weighted_statuses = [s for s in ORDER_STATUSES if s not in ["Delivered", "Shipped", "Cancelled", "Rejected"]]
+    
+    orders_created = []
     for _ in range(150):
         lens_type = random.choice(LENS_TYPES)
         sla_hours = SLA_HOURS_BY_LENS_TYPE[lens_type]
-        created_at = datetime.utcnow() - timedelta(hours=random.randint(1, 96), minutes=random.randint(0, 59))
+        
+        # Default: created_at between 1 and 40 hours ago
+        hours_ago = random.uniform(1, 40)
         status = random.choice(weighted_statuses)
-        if random.random() < 0.12:
-            status = "Delivered"
-        updated_at = created_at + timedelta(hours=random.randint(1, min(24, max(sla_hours, 1))))
+        
+        # Only Delivered and Shipped orders have created_at older than their SLA deadline
+        if random.random() < 0.15:
+            status = random.choice(["Delivered", "Shipped"])
+            # Make some of them older than SLA
+            if random.random() < 0.5:
+                hours_ago = random.uniform(sla_hours + 1, sla_hours + 20)
+        
+        created_at = datetime.utcnow() - timedelta(hours=hours_ago)
+        updated_at = created_at + timedelta(hours=random.uniform(0.5, min(hours_ago, 24)))
+        
         order = Order(
             customer_name=f"{random.choice(CUSTOMER_FIRST_NAMES)} {random.choice(CUSTOMER_LAST_NAMES)}",
             lens_type=lens_type,
@@ -57,8 +69,22 @@ def seed_orders(db):
         db.add(order)
         db.commit()
         db.refresh(order)
-        # Backfill ML prediction
+        # Backfill ML prediction (ensure breach_probability is between 0.0 and 1.0)
         crud.refresh_prediction(db, order)
+        orders_created.append(order)
+
+    # Print reporting
+    from app.services.sla import calculate_remaining_sla_hours
+    counts = {lt: 0 for lt in LENS_TYPES}
+    total_sla_left = 0
+    for o in orders_created:
+        counts[o.lens_type] += 1
+        total_sla_left += calculate_remaining_sla_hours(o)
+    
+    print("\nSeeding Report:")
+    for lt, count in counts.items():
+        print(f"Lens Type {lt}: {count} orders")
+    print(f"Average SLA Left: {total_sla_left / len(orders_created):.2f} hours")
 
 
 def main():
