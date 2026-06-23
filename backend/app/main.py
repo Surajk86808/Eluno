@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-from app.api.routes import analytics, dashboard, inventory, orders
+from app.api.routes import analytics, chat, dashboard, documents, inventory, orders
 from app.database import Base, engine, get_db
 from app.models import Alert, Inventory, Order
 from app import crud
@@ -54,6 +54,8 @@ app.include_router(inventory.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
+app.include_router(documents.router, prefix="/api")
 
 
 @app.get("/")
@@ -142,7 +144,7 @@ async def parse_prescription(file: UploadFile = File(...)):
         import google.generativeai as genai
         # Verify genai.configure(api_key=...) is called before model instantiation
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-3.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         
         content_type = file.content_type or "application/pdf"
 
@@ -201,7 +203,20 @@ if (FRONTEND_DIST / "assets").exists():
 @app.get("/{full_path:path}", include_in_schema=False)
 def serve_frontend(full_path: str):
     index_file = FRONTEND_DIST / "index.html"
-    if not index_file.exists() or full_path.startswith(("api/", "docs", "openapi.json", "redoc")):
+    api_prefixes = ("api/", "docs", "openapi.json", "redoc", "health")
+    if not index_file.exists() or full_path.startswith(api_prefixes):
         raise HTTPException(status_code=404, detail="Not found")
 
     return FileResponse(index_file)
+
+
+# ── Ensure chat_messages table exists even without AUTO_CREATE_TABLES ────────
+# This runs inline at import time so the table is always present.
+try:
+    from sqlalchemy import inspect as sa_inspect
+    _inspector = sa_inspect(engine)
+    if "chat_messages" not in _inspector.get_table_names():
+        from app.models import ChatMessage  # noqa: F401 — registers with Base
+        ChatMessage.__table__.create(bind=engine, checkfirst=True)
+except Exception:
+    logger.exception("Could not auto-create chat_messages table")

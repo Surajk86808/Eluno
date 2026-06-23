@@ -125,3 +125,44 @@ class ReferenceData(BaseModel):
     order_statuses: list[str] = ORDER_STATUSES
     store_locations: list[str] = STORE_LOCATIONS
     delay_reasons: list[str] = DELAY_REASONS
+
+
+# ── Chat schemas ────────────────────────────────────────────────────────────
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: str | None = None
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    data: dict | None = None
+    conversation_id: str
+
+
+# ── Invoice parser schemas ──────────────────────────────────────────────────
+class InvoiceLineItem(BaseModel):
+    description: str
+    quantity: float | None = None
+    unit_price: float | None = None
+    total: float | None = None
+
+
+class InvoiceData(BaseModel):
+    vendor_name: str | None = None
+    invoice_number: str | None = None
+    invoice_date: str | None = None
+    line_items: list[InvoiceLineItem] = []
+    subtotal: float | None = None
+    tax: float | None = None
+    grand_total: float | None = None
+
+
+# ── Stockout Forecast schema ────────────────────────────────────────────────
+class StockoutForecast(BaseModel):
+    sku_id: int
+    lens_type: str
+    power: float
+    current_stock: int
+    avg_daily_consumption: float
+    predicted_stockout_date: str | None  # ISO date string or None
+    days_remaining: float | None  # None = no consumption (won't stock out)

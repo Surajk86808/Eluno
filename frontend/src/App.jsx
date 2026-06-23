@@ -1,9 +1,11 @@
-import { Activity, AlertTriangle, Boxes, Clock, Edit3, History, LayoutDashboard, LineChart, PackageCheck, Save, X } from "lucide-react";
+import { Activity, AlertTriangle, Boxes, Clock, Edit3, History, LayoutDashboard, LineChart, MessageSquare, PackageCheck, Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "./api";
 import PrescriptionUpload from "./components/PrescriptionUpload";
 import Alerts from "./pages/Alerts";
+import Chat from "./pages/Chat";
+import InvoiceUpload from "./pages/InvoiceUpload";
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -11,6 +13,8 @@ const tabs = [
   { id: "orders", label: "Orders", icon: PackageCheck },
   { id: "analytics", label: "Analytics", icon: LineChart },
   { id: "alerts", label: "Alerts" },
+  { id: "chat", label: "Copilot", icon: MessageSquare },
+  { id: "invoice", label: "Invoice Parser" },
 ];
 
 function Stat({ label, value, icon: Icon, tone = "default" }) {
@@ -103,6 +107,11 @@ function OrderTable({ orders, onUpdateStatus, onViewDelayHistory }) {
 }
 
 function Dashboard({ summary, activeOrders, onNewOrderViaPrescription }) {
+  const allActiveAreDelayed =
+    summary &&
+    summary.active_orders > 0 &&
+    summary.delayed_orders >= summary.active_orders;
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-6 rounded-xl border border-line shadow-sm">
@@ -119,10 +128,22 @@ function Dashboard({ summary, activeOrders, onNewOrderViaPrescription }) {
         </button>
       </div>
 
+      {/* Historical data notice */}
+      {allActiveAreDelayed && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <div>
+            <span className="font-semibold">Historical dataset:</span> SLA timers run from each order's original creation date.
+            Orders older than their SLA window (48h / 72h / 96h) are counted as breached.
+            This is expected for imported or demo data — new orders you create today will show accurate SLA countdowns.
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-4">
         <Stat label="Total Orders" value={summary?.total_orders ?? 0} icon={PackageCheck} />
         <Stat label="Active Orders" value={summary?.active_orders ?? 0} icon={Activity} tone="signal" />
-        <Stat label="Delayed Orders" value={summary?.delayed_orders ?? 0} icon={AlertTriangle} tone="danger" />
+        <Stat label="SLA Breached" value={summary?.delayed_orders ?? 0} icon={AlertTriangle} tone="danger" />
         <Stat label="High Risk Orders" value={summary?.high_risk_orders ?? 0} icon={AlertTriangle} tone="danger" />
         <Stat label="Inventory Available" value={summary?.inventory_available ?? 0} icon={Boxes} tone="signal" />
         <Stat label="Inventory Shortages" value={summary?.inventory_shortage_orders ?? 0} icon={Boxes} tone="warning" />
@@ -147,6 +168,12 @@ function Inventory({ inventory, refs }) {
   const [lensType, setLensType] = useState("Single Vision");
   const [power, setPower] = useState("-2.0");
   const [availability, setAvailability] = useState(null);
+  const [inventoryTab, setInventoryTab] = useState("stock"); // "stock" | "forecast"
+  const [forecasts, setForecasts] = useState([]);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [importError, setImportError] = useState("");
+  const [exportLoading, setExportLoading] = useState(false);
 
   const lowStock = inventory.filter((item) => item.quantity <= item.reorder_level);
 
@@ -164,44 +191,233 @@ function Inventory({ inventory, refs }) {
     setAvailability(await api.inventoryCheck(lensType, power));
   }
 
+  async function loadForecast() {
+    if (forecasts.length > 0) return; // cached
+    setForecastLoading(true);
+    try {
+      const data = await api.inventoryForecast();
+      setForecasts(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setForecastLoading(false);
+    }
+  }
+
+  function handleTabChange(tab) {
+    setInventoryTab(tab);
+    if (tab === "forecast") loadForecast();
+  }
+
+  async function handleExport() {
+    setExportLoading(true);
+    try {
+      const blob = await api.exportInventoryExcel();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventory.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  async function handleImport(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportResult(null);
+    setImportError("");
+    try {
+      const result = await api.importInventoryExcel(file);
+      setImportResult(result);
+    } catch (err) {
+      setImportError(err.message);
+    }
+    // Reset file input
+    event.target.value = "";
+  }
+
+  // Recharts bar chart for forecast
+  function ForecastChart({ data }) {
+    // Only show items with days_remaining (exclude null)
+    const chartData = data
+      .filter((d) => d.days_remaining !== null)
+      .slice(0, 15)
+      .map((d) => ({
+        name: `${d.lens_type} (${d.power})`,
+        days: d.days_remaining,
+        fill: d.days_remaining <= 7 ? "#b91c1c" : d.days_remaining <= 30 ? "#b45309" : "#0f766e",
+      }));
+
+    if (chartData.length === 0) return <p className="text-sm text-slate-500">No consumption data available yet.</p>;
+
+    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } = window.Recharts || {};
+
+    // If recharts not available via window, use a simple visual bar
+    return (
+      <div className="space-y-2">
+        {chartData.map((item) => (
+          <div key={item.name} className="flex items-center gap-3 text-sm">
+            <span className="w-48 shrink-0 truncate text-slate-600" title={item.name}>{item.name}</span>
+            <div className="flex-1 rounded-full bg-slate-100 h-4 overflow-hidden">
+              <div
+                className="h-4 rounded-full transition-all"
+                style={{
+                  width: `${Math.min((item.days / 90) * 100, 100)}%`,
+                  backgroundColor: item.fill,
+                }}
+              />
+            </div>
+            <span className="w-20 text-right font-semibold" style={{ color: item.fill }}>
+              {item.days}d
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <section className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
-        <div className="rounded-lg border border-line bg-white p-4">
-          <h2 className="text-lg font-semibold text-ink">Inventory Availability</h2>
-          <div className="mt-4 space-y-3">
-            <select className="field" value={lensType} onChange={handleLensTypeChange}>
-              {refs.lens_types.map((type) => <option key={type}>{type}</option>)}
-            </select>
-            <input className="field" type="number" step="0.5" value={power} onChange={handlePowerChange} />
-            <button className="btn-primary" onClick={checkAvailability}>
-              Check
+      {/* Toolbar: Import / Export */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2 border border-line rounded-lg overflow-hidden bg-white">
+          {["stock", "forecast"].map((tab) => (
+            <button
+              key={tab}
+              className={`px-4 py-2 text-sm font-medium transition ${
+                inventoryTab === tab ? "bg-signal text-white" : "text-slate-600 hover:bg-slate-50"
+              }`}
+              onClick={() => handleTabChange(tab)}
+            >
+              {tab === "stock" ? "Stock" : "Forecast"}
             </button>
-            {availability && (
-              <div
-                className={`border-l-4 px-3 py-2 text-sm font-medium ${
-                  availability.in_stock ? "border-green-600 bg-green-50 text-green-800" : "border-red-600 bg-red-50 text-red-800"
-                }`}
-              >
-                {availability.in_stock
-                  ? `In Stock — Qty: ${availability.quantity}`
-                  : "Out of Stock — will need to order"}
-              </div>
-            )}
-          </div>
+          ))}
         </div>
-        <div className="rounded-lg border border-line bg-white p-4">
-          <h2 className="text-lg font-semibold text-ink">Low Stock Watchlist</h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {lowStock.slice(0, 12).map((item) => (
-              <div key={item.id} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
-                <p className="font-semibold text-warning">{item.lens_type}</p>
-                <p>Power {item.power} | Qty {item.quantity}</p>
-              </div>
-            ))}
-          </div>
+        <div className="flex gap-2">
+          <label className="btn-secondary cursor-pointer">
+            <span>Import Excel</span>
+            <input type="file" accept=".xlsx" onChange={handleImport} className="hidden" />
+          </label>
+          <button className="btn-secondary" onClick={handleExport} disabled={exportLoading}>
+            {exportLoading ? "Exporting…" : "Export Excel"}
+          </button>
         </div>
       </div>
+
+      {importResult && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          Imported {importResult.imported} rows of {importResult.total_rows} total.
+          {importResult.errors.length > 0 && (
+            <ul className="mt-1 list-disc list-inside text-red-700">
+              {importResult.errors.map((e, i) => <li key={i}>Row {e.row}: {e.error}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      {importError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{importError}</div>
+      )}
+
+      {/* Stock tab */}
+      {inventoryTab === "stock" && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
+          <div className="rounded-lg border border-line bg-white p-4">
+            <h2 className="text-lg font-semibold text-ink">Inventory Availability</h2>
+            <div className="mt-4 space-y-3">
+              <select className="field" value={lensType} onChange={handleLensTypeChange}>
+                {refs.lens_types.map((type) => <option key={type}>{type}</option>)}
+              </select>
+              <input className="field" type="number" step="0.5" value={power} onChange={handlePowerChange} />
+              <button className="btn-primary" onClick={checkAvailability}>
+                Check
+              </button>
+              {availability && (
+                <div
+                  className={`border-l-4 px-3 py-2 text-sm font-medium ${
+                    availability.in_stock ? "border-green-600 bg-green-50 text-green-800" : "border-red-600 bg-red-50 text-red-800"
+                  }`}
+                >
+                  {availability.in_stock
+                    ? `In Stock — Qty: ${availability.quantity}`
+                    : "Out of Stock — will need to order"}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="rounded-lg border border-line bg-white p-4">
+            <h2 className="text-lg font-semibold text-ink">Low Stock Watchlist</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {lowStock.slice(0, 12).map((item) => (
+                <div key={item.id} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                  <p className="font-semibold text-warning">{item.lens_type}</p>
+                  <p>Power {item.power} | Qty {item.quantity}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Forecast tab */}
+      {inventoryTab === "forecast" && (
+        <div className="rounded-xl border border-line bg-white p-5 space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold text-ink">Stockout Forecast</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Based on 60-day consumption rate · sorted by urgency</p>
+          </div>
+
+          {forecastLoading && <p className="text-sm text-slate-500">Computing forecasts…</p>}
+
+          {!forecastLoading && forecasts.length > 0 && (
+            <>
+              {/* Visual bar chart */}
+              <div className="rounded-lg border border-line p-4">
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Days Until Stockout</h3>
+                <ForecastChart data={forecasts} />
+              </div>
+
+              {/* Detailed table */}
+              <div className="overflow-x-auto rounded-lg border border-line">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-line">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Lens Type</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Power</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Stock</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Avg/Day</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Days Left</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Stockout Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {forecasts.map((item) => {
+                      const urgent = item.days_remaining !== null && item.days_remaining <= 7;
+                      const warning = item.days_remaining !== null && item.days_remaining <= 30 && !urgent;
+                      return (
+                        <tr key={item.sku_id} className={`hover:bg-slate-50 ${urgent ? "bg-red-50" : warning ? "bg-amber-50" : ""}`}>
+                          <td className="px-4 py-2 font-medium text-ink">{item.lens_type}</td>
+                          <td className="px-4 py-2">{item.power}</td>
+                          <td className="px-4 py-2">{item.current_stock}</td>
+                          <td className="px-4 py-2">{item.avg_daily_consumption}</td>
+                          <td className={`px-4 py-2 font-semibold ${urgent ? "text-danger" : warning ? "text-warning" : "text-signal"}`}>
+                            {item.days_remaining !== null ? `${item.days_remaining}d` : "—"}
+                          </td>
+                          <td className="px-4 py-2 text-slate-500">{item.predicted_stockout_date || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -532,6 +748,8 @@ export default function App() {
     }
     if (activeTab === "analytics") return <Analytics analytics={analytics} />;
     if (activeTab === "alerts") return <Alerts alerts={alerts} />;
+    if (activeTab === "chat") return <Chat />;
+    if (activeTab === "invoice") return <InvoiceUpload />;
     return (
       <Dashboard
         summary={summary}

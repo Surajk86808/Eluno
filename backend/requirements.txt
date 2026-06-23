@@ -8,3 +8,5 @@ joblib==1.4.2
 python-multipart==0.0.20
 google-generativeai==0.8.3
 psycopg2-binary==2.9.10
+openpyxl==3.1.5
+numpy==1.26.4

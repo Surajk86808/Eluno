@@ -59,3 +59,13 @@ class Alert(Base):
     breach_probability: Mapped[float] = mapped_column(Float, default=0.0)
     alert_type: Mapped[str] = mapped_column(String(20), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    conversation_id: Mapped[str] = mapped_column(String(80), index=True)
+    role: Mapped[str] = mapped_column(String(20))  # "user" or "assistant"
+    content: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
